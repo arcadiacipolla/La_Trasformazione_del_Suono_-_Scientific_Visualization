@@ -63,7 +63,7 @@ TUFTE_RC: dict = {
     "grid.color":           MUTED_ALT,
     "grid.linestyle":       "--",
     "grid.linewidth":       0.5,
-    "grid.alpha":           0.6,
+    "grid.alpha":           0.2,   # criterio data-ink: griglia quasi invisibile
     "axes.axisbelow":       True,   # griglia sotto i dati, non sopra
 
     # Tick leggeri, verso l'esterno
