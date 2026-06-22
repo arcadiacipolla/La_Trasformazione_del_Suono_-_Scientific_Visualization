@@ -310,11 +310,12 @@ def data_quality_report(df: pd.DataFrame) -> pd.DataFrame:
     """
     cols = [c for c in AUDIO_FEATURES + ["year", "popularity"]
             if c in df.columns]
+    print(cols)
 
     report = pd.DataFrame({
         "feature":  cols,
-        "n":        [int(df[c].notna().sum()) for c in cols],
-        "null_%":   [round(df[c].isna().mean() * 100, 2) for c in cols],
+        # "n":        [int(df[c].notna().sum()) for c in cols],
+        # "null_%":   [round(df[c].isna().mean() * 100, 2) for c in cols],
         "min":      [round(df[c].min(), 4) for c in cols],
         "max":      [round(df[c].max(), 4) for c in cols],
         "mean":     [round(df[c].mean(), 4) for c in cols],
@@ -345,7 +346,7 @@ def run_pipeline(
         from src.preprocessing import run_pipeline
         df = run_pipeline()
     """
-    print("── Preprocessing pipeline ──────────────────────────")
+    print("[*] Fase di pipeline")
     tracks, artists = load_data(tracks_path, artists_path)
     df = drop_duplicates(tracks)
     df = handle_nulls(df)
@@ -354,7 +355,7 @@ def run_pipeline(
     df = add_primary_genre(df, artists)
     df = add_hit_label(df)
     save_clean(df, out_path)
-    print(f"── Done — dataset finale: {len(df):,} brani ────────────")
+    print(f"[+] Dataset elaborato con successo --> {len(df):,} brani")
     return df
 
 
