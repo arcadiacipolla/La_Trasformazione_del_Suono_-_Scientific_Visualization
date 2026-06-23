@@ -1,21 +1,18 @@
 """
-src/clustering.py — The Shape of Music
-──────────────────────────────────────────────────────────────────────────────
-K-Means clustering sulle feature audio del dataset Spotify.
-Produce i dati necessari per il Parallel Coordinates Plot (M4).
+src/clustering.py : K-Means clustering sulle feature audio del dataset Spotify
 
 Pipeline:
-  1. Selezione delle 8 feature audio
-  2. StandardScaler — necessario anche con feature già in [0, 1]
-  3. Elbow Method + Silhouette Score per trovare k ottimale
-  4. K-Means finale con il k scelto
-  5. Profilazione cluster come Z-score (input del Parallel Coordinates)
-  6. Naming automatico dei cluster da profilo dominante
-  7. PCA 2D opzionale per scatter di controllo
+ 1. Selezione delle 8 feature audio
+ 2. StandardScaler
+ 3. Elbow Method + Silhouette Score per trovare k ottimale
+ 4. K-Means finale con il k scelto
+ 5. Profilazione cluster come Z-score (input del Parallel Coordinates)
+ 6. Naming automatico dei cluster da profilo dominante
+ 7. PCA 2D opzionale per scatter di controllo
 
 Output:
-  · data/spotify_clustered.csv  — dataset con colonna 'cluster' aggiunta
-  · dict results                — tutto il necessario per M4 nel notebook
+ - data/spotify_clustered.csv: dataset con colonna 'cluster' aggiunta
+ - dict results:               informazioni necessarie per M4: Archetipi
 """
 
 from __future__ import annotations
@@ -33,14 +30,12 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", message=".*n_init.*")
 
 
-# ── Costanti ──────────────────────────────────────────────────────────────────
+# Costanti
 
 DATA_DIR       = "data"
 CLUSTERED_PATH = os.path.join(DATA_DIR, "spotify_clustered.csv")
 
 # Le 8 feature audio per il clustering.
-# 'loudness_norm' e 'tempo_norm' sono le versioni generate da preprocessing.py.
-# Se non presenti (preprocessing saltato), vengono usate le colonne raw.
 CLUSTER_FEATURES: list[str] = [
     "danceability",
     "energy",
@@ -54,14 +49,13 @@ CLUSTER_FEATURES: list[str] = [
 
 K_RANGE_DEFAULT = range(2, 11)   # k = 2..10
 
-# Soglie Z-score per il naming automatico dei cluster.
-# Un cluster è "dominato" da una feature se il suo Z-score medio supera
-# DOMINANT_THR; è "basso" su quella feature se scende sotto LOW_THR.
+# Soglie Z-score per il naming automatico dei cluster
+# Nota: un cluster è "dominato" da una feature se il suo Z-score medio supera
+# DOMINANT_THR; è "basso" su quella feature se scende sotto LOW_THR
 DOMINANT_THR =  0.55
 LOW_THR      = -0.55
 
 # Etichette semantiche per ogni feature (alta, bassa)
-# Ordine: dalla più importante per la narrativa del progetto
 _FEATURE_LABELS: dict[str, tuple[str, str | None]] = {
     "acousticness":     ("acustico",    "elettronico"),
     "energy":           ("energico",    "calmo"),
@@ -75,15 +69,12 @@ _FEATURE_LABELS: dict[str, tuple[str, str | None]] = {
 }
 
 
-# ── Funzioni ──────────────────────────────────────────────────────────────────
+
+# Funzioni
 
 def select_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Estrae le feature audio dal DataFrame pulito.
-
-    Fallback automatico:
-      · 'loudness_norm' mancante → usa 'loudness' con avviso
-      · Feature mancante in generale → saltata con avviso
+    Estrae le feature audio dal DataFrame pulito
     """
     selected = []
     for col in CLUSTER_FEATURES:
@@ -91,28 +82,21 @@ def select_features(df: pd.DataFrame) -> pd.DataFrame:
             selected.append(col)
         elif col == "loudness_norm" and "loudness" in df.columns:
             selected.append("loudness")
-            print("  Warning: 'loudness_norm' non trovata → uso 'loudness' (non normalizzata)")
+            print("    Warning: 'loudness_norm' non trovata -> uso 'loudness' (non normalizzata)")
         else:
-            print(f"  Warning: feature '{col}' assente nel DataFrame — saltata")
+            print(f"    Warning: feature '{col}' assente nel DataFrame (saltata)")
 
-    print(f"  Feature selezionate ({len(selected)}): {selected}")
+    print(f"    Feature selezionate ({len(selected)}): {selected}")
     return df[selected].copy()
 
 
 def scale(X: pd.DataFrame) -> tuple[np.ndarray, StandardScaler]:
     """
-    Applica StandardScaler alle feature.
-
-    Perché scalare anche feature già in [0, 1]:
-    K-Means misura distanze euclidee — distribuzioni con varianza diversa
-    (es. instrumentalness ha un picco forte vicino a 0, danceability è
-    distribuita più uniformemente) distorcerebbero i cluster senza scaling.
-    Restituiamo anche lo scaler per poter invertire la trasformazione
-    se necessario (es. per mostrare i centroidi in unità originali).
+    Applica StandardScaler alle feature
     """
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    print(f"  StandardScaler → shape: {X_scaled.shape}")
+    print(f"    StandardScaler → shape: {X_scaled.shape}")
     return X_scaled, scaler
 
 
@@ -122,10 +106,7 @@ def elbow_curve(
     random_state: int   = 42,
 ) -> dict[str, list]:
     """
-    Calcola l'inertia (WCSS) per ogni k nel range.
-
-    Restituisce {'k': [...], 'inertia': [...]} — formato pronto per ax.plot().
-    Il "gomito" visivo suggerisce un k candidato; va confermato con Silhouette.
+    Calcola l'inertia (WCSS) per ogni k nel range
     """
     ks, inertias = [], []
     for k in k_range:
@@ -133,7 +114,7 @@ def elbow_curve(
         km.fit(X_scaled)
         ks.append(k)
         inertias.append(round(km.inertia_, 1))
-        print(f"    k={k:2d}  inertia={km.inertia_:>12,.0f}")
+        print(f"      k={k:2d}  inertia={km.inertia_:>12,.0f}")
 
     return {"k": ks, "inertia": inertias}
 
@@ -145,11 +126,7 @@ def silhouette_scores(
     sample_size:  int   = 20_000,
 ) -> dict:
     """
-    Calcola il Silhouette Score medio per ogni k.
-
-    Usa un campione (default 20 k brani) per velocizzare il calcolo
-    su dataset di 500+ k righe — l'errore su campioni grandi è trascurabile.
-    Restituisce {'k': [...], 'scores': [...], 'best_k': int}.
+    Calcola il Silhouette Score medio per ogni k
     """
     n = X_scaled.shape[0]
     rng = np.random.default_rng(random_state)
@@ -163,10 +140,10 @@ def silhouette_scores(
         score  = silhouette_score(X_sample, labels, random_state=random_state)
         ks.append(k)
         scores.append(round(float(score), 4))
-        print(f"    k={k:2d}  silhouette={score:.4f}")
+        print(f"      k={k:2d}  silhouette={score:.4f}")
 
     best_k = ks[int(np.argmax(scores))]
-    print(f"  → k ottimale (silhouette max): {best_k}")
+    print(f"    -> k ottimale (silhouette max): {best_k}")
     return {"k": ks, "scores": scores, "best_k": best_k}
 
 
@@ -176,16 +153,13 @@ def find_optimal_k(
     random_state: int   = 42,
 ) -> tuple[int, dict, dict]:
     """
-    Combina Elbow Method e Silhouette Score.
-    La scelta finale segue il Silhouette (più oggettivo).
-    I dati dell'Elbow restano disponibili per il grafico diagnostico in M4.
-
-    Restituisce (best_k, elbow_data, silhouette_data).
+    Combina Elbow Method e Silhouette Score
+    La scelta finale segue il Silhouette (più oggettivo)
     """
-    print("  ── Elbow Method ────────────────────")
+    print("    Elbow Method")
     elbow_data = elbow_curve(X_scaled, k_range, random_state)
 
-    print("  ── Silhouette Score ────────────────")
+    print("    Silhouette Score")
     sil_data   = silhouette_scores(X_scaled, k_range, random_state)
 
     return sil_data["best_k"], elbow_data, sil_data
@@ -198,19 +172,17 @@ def run_kmeans(
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, KMeans]:
     """
-    Addestra K-Means con il k scelto e aggiunge la colonna 'cluster'.
-    I cluster sono numerati 0..k-1 — il notebook può rimapparli
-    con cluster_names per le etichette leggibili.
+    Addestra K-Means con il k scelto e aggiunge la colonna 'cluster'
     """
     km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
     df = df.copy()
     df["cluster"] = km.fit_predict(X_scaled)
 
-    print(f"  K-Means (k={k}) completato")
+    print(f"    K-Means (k={k}) completato")
     dist = df["cluster"].value_counts().sort_index()
     for c, n in dist.items():
         bar = "█" * int(n / len(df) * 40)
-        print(f"    cluster {c}: {n:>6,}  ({n/len(df)*100:.1f}%)  {bar}")
+        print(f"      cluster {c}: {n:>6,}  ({n/len(df)*100:.1f}%)  {bar}")
 
     return df, km
 
@@ -220,17 +192,7 @@ def cluster_profiles(
     features: list[str] | None = None,
 ) -> pd.DataFrame:
     """
-    Calcola il profilo Z-score di ogni cluster sulle feature audio.
-
-    Output: DataFrame shape (k × n_features), indice = cluster id.
-    Questo DataFrame è l'input diretto del Parallel Coordinates Plot in M4:
-    ogni riga è una "linea" del grafico, ogni colonna è un asse.
-
-    Perché Z-score e non medie raw:
-    Le medie grezze dipendono dalla distribuzione globale di ogni feature —
-    una feature molto concentrata (es. instrumentalness ≈ 0 per la maggior parte)
-    avrebbe variazioni di cluster piccole e visivamente poco leggibili.
-    Lo Z-score porta tutte le feature sulla stessa scala di variazione.
+    Calcola il profilo Z-score di ogni cluster sulle feature audio
     """
     if features is None:
         features = [c for c in CLUSTER_FEATURES if c in df.columns]
@@ -251,22 +213,13 @@ def cluster_profiles(
     df_z["cluster"] = df["cluster"].values
     profiles = df_z.groupby("cluster")[features].mean().round(3)
 
-    print(f"  Profili cluster calcolati: shape {profiles.shape}")
+    print(f"    Profili cluster calcolati: shape {profiles.shape}")
     return profiles
 
 
 def name_clusters(profiles: pd.DataFrame) -> dict[int, str]:
     """
-    Assegna un nome descrittivo a ogni cluster basandosi sul profilo Z-score.
-
-    Logica: per ogni cluster identifica le feature con Z-score dominante
-    (sopra DOMINANT_THR) o molto basso (sotto LOW_THR) e costruisce
-    una label concatenando i descrittori più significativi.
-
-    Esempio: cluster con alta acousticness e bassa energy → "acustico-calmo"
-
-    I nomi sono descrittivi del suono, non categoriali — non pretendono
-    di corrispondere esattamente a generi musicali preesistenti.
+    Assegna un nome descrittivo a ogni cluster basandosi sul profilo Z-score
     """
     names: dict[int, str] = {}
 
@@ -290,9 +243,9 @@ def name_clusters(profiles: pd.DataFrame) -> dict[int, str]:
         label = "-".join(parts) if parts else f"cluster {cluster_id}"
         names[int(cluster_id)] = label
 
-    print("  Nomi cluster automatici:")
+    print("    Nomi cluster automatici:")
     for cid, name in names.items():
-        print(f"    {cid} → '{name}'")
+        print(f"      {cid} → '{name}'")
 
     return names
 
@@ -301,23 +254,14 @@ def pca_2d(
     X_scaled: np.ndarray,
 ) -> tuple[pd.DataFrame, np.ndarray]:
     """
-    Riduce le feature a 2 componenti principali per visualizzazione.
-
-    Restituisce (df_pca, explained_variance_ratio) dove:
-      · df_pca ha colonne ['pc1', 'pc2']
-      · explained_variance_ratio è array [var_pc1, var_pc2]
-
-    Uso tipico nel notebook (scatter di controllo opzionale):
-        pca_df, var = results['pca_df'], results['pca_explained']
-        ax.scatter(pca_df['pc1'], pca_df['pc2'], c=df_c['cluster'], ...)
-        ax.set_xlabel(f"PC1 ({var[0]*100:.1f}% var.)")
+    Riduce le feature a 2 componenti principali per visualizzazione
     """
     pca        = PCA(n_components=2, random_state=42)
     components = pca.fit_transform(X_scaled)
     var        = pca.explained_variance_ratio_
 
-    print(f"  PCA 2D: PC1={var[0]*100:.1f}%  PC2={var[1]*100:.1f}%"
-          f"  (spiegato: {sum(var)*100:.1f}%)")
+    print(f"    PCA 2D: PC1={var[0]*100:.1f}%  PC2={var[1]*100:.1f}%"
+          f"    (spiegato: {sum(var)*100:.1f}%)")
 
     df_pca = pd.DataFrame({"pc1": components[:, 0], "pc2": components[:, 1]})
     return df_pca, var
@@ -327,12 +271,10 @@ def save_clustered(df: pd.DataFrame, out_path: str = CLUSTERED_PATH) -> None:
     """Salva il DataFrame arricchito con la colonna 'cluster'."""
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     df.to_csv(out_path, index=False)
-    print(f"  Saved → {out_path}  ({len(df):,} rows, {df.shape[1]} cols)")
+    print(f"    Salvataggio → {out_path}  ({len(df):,} righe, {df.shape[1]} colonne)")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
-
-def run_pipeline(
+def run_cluster_pipeline(
     df:           pd.DataFrame,
     k:            int | None = None,
     k_range:      range      = K_RANGE_DEFAULT,
@@ -347,35 +289,29 @@ def run_pipeline(
     (utile per iterazioni veloci dopo la prima esecuzione).
 
     Restituisce (df_clustered, results) dove results contiene:
-      · 'k'               : k usato
-      · 'kmeans'          : modello KMeans addestrato
-      · 'scaler'          : StandardScaler per inversione
-      · 'feature_names'   : lista feature usate
-      · 'profiles'        : DataFrame Z-score (k × features) per M4
-      · 'cluster_names'   : dict {int → str} per le etichette
-      · 'pca_df'          : DataFrame con pc1, pc2 per scatter opzionale
-      · 'pca_explained'   : varianza spiegata da PC1 e PC2
-      · 'elbow_data'      : {'k', 'inertia'} per grafico Elbow in M4
-      · 'silhouette_data' : {'k', 'scores', 'best_k'} per grafico Sil. in M4
-
-    Uso nel notebook (M4):
-        from src.clustering import run_pipeline
-        df_c, results = run_pipeline(df)
-        profiles      = results['profiles']       # → Parallel Coordinates
-        names         = results['cluster_names']  # → etichette assi
+     - 'k'              : k usato
+     - 'kmeans'         : modello KMeans addestrato
+     - 'scaler'         : StandardScaler per inversione
+     - 'feature_names'  : lista feature usate
+     - 'profiles'       : DataFrame Z-score (k × features) per M4
+     - 'cluster_names'  : dict {int → str} per le etichette
+     - 'pca_df'         : DataFrame con pc1, pc2 per scatter opzionale
+     - 'pca_explained'  : varianza spiegata da PC1 e PC2
+     - 'elbow_data'     : {'k', 'inertia'} per grafico Elbow in M4
+     - 'silhouette_data': {'k', 'scores', 'best_k'} per grafico Sil. in M4
     """
-    print("── Clustering pipeline ─────────────────────────────")
+    print("[*] Avvio pipeline di clustering")
 
     X             = select_features(df)
     feature_names = list(X.columns)
     X_scaled, scaler = scale(X)
 
     if k is None:
-        print("  Ricerca k ottimale (Elbow + Silhouette)...")
+        print("    Ricerca k ottimale (Elbow + Silhouette)...")
         k, elbow_data, sil_data = find_optimal_k(X_scaled, k_range, random_state)
     else:
-        print(f"  k fornito manualmente: {k}")
-        print("  Calcolo diagnostici comunque (per i grafici M4)...")
+        print(f"    k fornito manualmente: {k}")
+        print("    Calcolo diagnostici comunque (per i grafici M4)...")
         elbow_data = elbow_curve(X_scaled, k_range, random_state)
         sil_data   = silhouette_scores(X_scaled, k_range, random_state)
 
@@ -399,7 +335,7 @@ def run_pipeline(
         "silhouette_data": sil_data,
     }
 
-    print(f"── Done — {k} cluster  ·  {len(df_c):,} brani ─────────────")
+    print(f"[*] Cluster effettuato con successo --> {len(df_c):,} brani")
     return df_c, results
 
 
@@ -407,6 +343,6 @@ if __name__ == "__main__":
     clean_path = os.path.join(DATA_DIR, "spotify_clean.csv")
     if os.path.exists(clean_path):
         df = pd.read_csv(clean_path)
-        run_pipeline(df)
+        run_cluster_pipeline(df)
     else:
-        print(f"Errore: '{clean_path}' non trovato. Esegui prima preprocessing.py.")
+        print(f"[-] Errore: '{clean_path}' non trovato. Esegui prima src/preprocessing.py.")
