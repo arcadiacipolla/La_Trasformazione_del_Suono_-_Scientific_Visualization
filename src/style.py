@@ -44,8 +44,8 @@ TUFTE_RC: dict = {
     "axes.spines.right":    False,
     "axes.spines.left":     True,
     "axes.spines.bottom":   True,
-    # Griglia tenue come guida, non come struttura dominante
-    "axes.grid":            True,
+    # Massimizzato data-ink di Tufte e tolto effetto di Moiré
+    "axes.grid":            False,
     "grid.color":           MUTED_ALT,
     "grid.linestyle":       "--",
     "grid.linewidth":       0.5,
