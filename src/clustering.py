@@ -283,22 +283,6 @@ def run_cluster_pipeline(
 ) -> tuple[pd.DataFrame, dict]:
     """
     Esegue l'intera pipeline di clustering.
-
-    Se k=None, determina automaticamente k ottimale via Silhouette Score.
-    Se k è fornito, salta la ricerca e usa quel valore direttamente
-    (utile per iterazioni veloci dopo la prima esecuzione).
-
-    Restituisce (df_clustered, results) dove results contiene:
-     - 'k'              : k usato
-     - 'kmeans'         : modello KMeans addestrato
-     - 'scaler'         : StandardScaler per inversione
-     - 'feature_names'  : lista feature usate
-     - 'profiles'       : DataFrame Z-score (k × features) per M4
-     - 'cluster_names'  : dict {int → str} per le etichette
-     - 'pca_df'         : DataFrame con pc1, pc2 per scatter opzionale
-     - 'pca_explained'  : varianza spiegata da PC1 e PC2
-     - 'elbow_data'     : {'k', 'inertia'} per grafico Elbow in M4
-     - 'silhouette_data': {'k', 'scores', 'best_k'} per grafico Sil. in M4
     """
     print("[*] Avvio pipeline di clustering")
 
