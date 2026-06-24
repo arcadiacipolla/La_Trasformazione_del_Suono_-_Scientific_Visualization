@@ -167,6 +167,11 @@ def normalize_features(df: pd.DataFrame) -> pd.DataFrame:
                   f"[{col_min:.2f}, {col_max:.2f}] → [0, 1]")
         else:
             df[f"{col}_norm"] = 0.0
+
+    # Aggiorna nome features normalizzate
+    for i in range(len(AUDIO_FEATURES)):
+        if AUDIO_FEATURES[i] in FEATURES_TO_NORMALIZE:
+            AUDIO_FEATURES[i] += "_norm"
     return df
 
 
